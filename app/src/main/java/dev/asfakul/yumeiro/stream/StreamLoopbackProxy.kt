@@ -128,7 +128,12 @@ object StreamLoopbackProxy {
                 writeStatus(out, 404, "Not Found"); return
             }
 
-            val client = NetworkClient.get(appContext)
+            val app = appContext
+            if (app == null) {
+                writeStatus(out, 503, "Service Unavailable")
+                return
+            }
+            val client = NetworkClient.get(app)
             val rangeHeader = reqHeaders["range"]
             val host = runCatching { URI(entry.url).host.orEmpty() }.getOrDefault("")
             val t0 = System.currentTimeMillis()
