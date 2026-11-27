@@ -46,6 +46,22 @@ class ProviderCircuitBreakerTest {
     }
 
     @Test
+    fun successfulHostsRankAboveUnknownAndDegradedHosts() {
+        ProviderCircuitBreaker.recordSuccess("healthy.example", 120)
+        ProviderCircuitBreaker.recordFailure("degraded.example", 500)
+        ProviderCircuitBreaker.recordFailure("degraded.example", 500)
+
+        assertTrue(
+            ProviderCircuitBreaker.rankBonus("https://healthy.example/video.mp4") >
+                ProviderCircuitBreaker.rankBonus("https://new.example/video.mp4")
+        )
+        assertTrue(
+            ProviderCircuitBreaker.rankBonus("https://new.example/video.mp4") >
+                ProviderCircuitBreaker.rankBonus("https://degraded.example/video.mp4")
+        )
+    }
+
+    @Test
     fun authorizationAndMissingResourcesCarryHigherFailureWeight() {
         val url = "https://media.example/video.mp4"
         ProviderCircuitBreaker.recordFailure("media.example", 403)

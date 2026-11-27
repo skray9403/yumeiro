@@ -226,13 +226,17 @@ object StreamLoopbackProxy {
                         Thread.sleep(250L * (1 shl attempt))
                         continue
                     }
+                    ProviderCircuitBreaker.recordFailure(host, res.code)
                     return res
                 }
                 lastResponse?.close()
+                if (res.code in 400..499) ProviderCircuitBreaker.recordFailure(host, res.code)
                 return res
             } catch (e: IOException) {
-                ProviderCircuitBreaker.recordFailure(host, -1)
-                if (attempt == MAX_HEADER_RETRIES) return lastResponse
+                if (attempt == MAX_HEADER_RETRIES) {
+                    ProviderCircuitBreaker.recordFailure(host, -1)
+                    return lastResponse
+                }
                 runCatching { Thread.sleep(250L * (1 shl attempt)) }
             }
         }
@@ -307,15 +311,26 @@ object StreamLoopbackProxy {
             }
 
             val completed = contentLength in 1..totalWritten
-            if (dropError == null || completed || !canResume || midRetries >= MAX_MIDSTREAM_RETRIES) break
+            if (dropError == null || completed) break
+            if (!canResume || midRetries >= MAX_MIDSTREAM_RETRIES) {
+                ProviderCircuitBreaker.recordFailure(host, -1)
+                break
+            }
 
             midRetries++
             val nextStart = startOffset + totalWritten
             Log.w(TAG, "Mid-stream drop on $host at byte $nextStart (retry $midRetries/$MAX_MIDSTREAM_RETRIES)")
             runCatching { Thread.sleep(200L * midRetries) }
             val nextReq = buildUpstreamRequest(entry, "GET", "bytes=$nextStart-")
-            currentRes = runCatching { client.newCall(nextReq).execute() }.getOrNull()
-                ?.takeIf { it.code == 206 } ?: break
+            val resumed = runCatching { client.newCall(nextReq).execute() }.getOrNull()
+            currentRes = resumed?.takeIf { it.code == 206 }
+            if (currentRes == null) {
+                resumed?.let {
+                    ProviderCircuitBreaker.recordFailure(host, it.code)
+                    it.close()
+                } ?: ProviderCircuitBreaker.recordFailure(host, -1)
+                break
+            }
         }
     }
 
