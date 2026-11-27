@@ -64,6 +64,36 @@ object StreamLoopbackProxy {
         }
     }
 
+    /**
+     * Wraps supported HTTP media requests for resilient range recovery and HLS manifest rewriting.
+     * DASH, SmoothStreaming, RTSP, DRM and already-local URLs remain on the native Media3 path.
+     */
+    fun relay(context: Context, request: StreamRequest): StreamRequest {
+        val url = request.url
+        if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return request
+        val host = runCatching { Uri.parse(url).host.orEmpty() }.getOrDefault("")
+        if (host == "127.0.0.1" || host == "localhost" || host == "::1") return request
+        if (request.drmScheme != DrmScheme.NONE) return request
+        when (request.resolvedFormat()) {
+            StreamFormat.DASH, StreamFormat.SMOOTH, StreamFormat.RTSP -> return request
+            else -> Unit
+        }
+
+        val upstreamHeaders = buildMap {
+            putAll(request.requestHeaders())
+            request.userAgent?.takeIf { it.isNotBlank() }?.let { put("User-Agent", it) }
+        }
+        val localUrl = register(context, url, upstreamHeaders)
+        return request.copy(
+            url = localUrl,
+            userAgent = null,
+            referer = null,
+            origin = null,
+            cookie = null,
+            headers = emptyMap(),
+        )
+    }
+
     fun register(context: Context, url: String, headers: Map<String, String>): String {
         val p = ensureStarted(context)
         evictIfNeeded()
