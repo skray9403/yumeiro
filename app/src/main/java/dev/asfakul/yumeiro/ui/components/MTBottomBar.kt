@@ -143,57 +143,68 @@ fun MTBottomBar(
                     // Keyboard / D-pad focus: a ring around the tab (touch never focuses it).
                     val tabSource = remember { MutableInteractionSource() }
                     val tabFocused by tabSource.collectIsFocusedAsState()
-                    Column(
+                    val itemWeight by animateFloatAsState(
+                        if (isSelected) 1.65f else 1f,
+                        if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.spring(
+                            dampingRatio = 0.78f,
+                            stiffness = 620f,
+                        ),
+                        label = "navMorphWeight",
+                    )
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(16.dp))
+                            .weight(itemWeight)
+                            .height(48.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) pillColor else Color.Transparent)
                             .clickable(
                                 interactionSource = tabSource,
                                 indication = androidx.compose.material3.ripple(bounded = true, color = activeTint),
                                 role = Role.Tab,
                                 onClickLabel = item.label,
                             ) { if (!isSelected) onNavigateToRoute(item.route) }
-                            .padding(vertical = 6.dp)
-                            .then(if (tabFocused) Modifier.border(2.dp, activeTint, RoundedCornerShape(16.dp)) else Modifier)
+                            .then(if (tabFocused) Modifier.border(2.dp, activeTint, CircleShape) else Modifier)
                             .semantics { selected = isSelected; contentDescription = item.label }
                             .testTag(item.testTag)
-                            .tourTarget(item.testTag),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
+                            .tourTarget(item.testTag)
+                            .then(Modifier.testTag(if (isSelected) "nav_active_pill" else "nav_pill_off"))
+                            .padding(horizontal = if (isSelected) 12.dp else 0.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
                     ) {
-                        // Up to seven tabs: the pill narrows with the tab (56 dp at most) so it never touches its neighbour.
-                        Box(Modifier.padding(horizontal = 3.dp).widthIn(max = 56.dp).fillMaxWidth().height(30.dp), contentAlignment = Alignment.Center) {
-                            Box(
-                                Modifier.matchParentSize()
-                                    .graphicsLayer { alpha = pill; scaleX = 0.6f + 0.4f * pill; scaleY = 0.85f + 0.15f * pill }
-                                    .clip(CircleShape)
-                                    .background(pillColor)
-                                    .testTag(if (isSelected) "nav_active_pill" else "nav_pill_off")
+                        androidx.compose.animation.Crossfade(
+                            isSelected,
+                            animationSpec = androidx.compose.animation.core.tween(if (reduced) 0 else 150),
+                            label = "navGlyph",
+                        ) { selected ->
+                            Icon(
+                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                                contentDescription = null,
+                                tint = tint,
+                                modifier = Modifier.size(22.dp).testTag(if (selected) "nav_icon_filled" else "nav_icon_outline"),
                             )
-                            androidx.compose.animation.Crossfade(isSelected, animationSpec = androidx.compose.animation.core.tween(if (reduced) 0 else 160), label = "navGlyph") { sel ->
-                                Icon(
-                                    imageVector = if (sel) item.selectedIcon else item.unselectedIcon,
-                                    contentDescription = null,
-                                    tint = tint,
-                                    modifier = Modifier.size(24.dp).testTag(if (sel) "nav_icon_filled" else "nav_icon_outline"),
+                        }
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = isSelected,
+                            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandHorizontally(),
+                            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally(),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    item.label,
+                                    color = tint,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.testTag("nav_label_${item.testTag}"),
                                 )
                             }
                         }
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            item.label,
-                            color = tint,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            lineHeight = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 2.dp).testTag("nav_label_${item.testTag}").clearAndSetSemantics { },
-                        )
-                    }
-                }
+                    }                }
             }
         }
     }
