@@ -1,3 +1,4 @@
+# Re-run the standalone UI mockup build after the Kotlin syntax fix.
 name: Yumeiro UI Mockup APK
 
 on:
