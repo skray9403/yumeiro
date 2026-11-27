@@ -97,7 +97,7 @@ import androidx.compose.foundation.layout.heightIn
 import dev.asfakul.yumeiro.ui.theme.OnAccent
 import dev.asfakul.yumeiro.ui.theme.SpotifyGreen
 
-private enum class Panel { EPISODES, SOURCES, SUBTITLES }
+private enum class Panel { EPISODES, SUBTITLES }
 
 private val PanelColor = Color(0xF2121418)
 private val ChipColor = Color.White.copy(alpha = 0.14f)
@@ -109,6 +109,7 @@ private val ChipColor = Color.White.copy(alpha = 0.14f)
 private val LocalPanelInk = androidx.compose.runtime.staticCompositionLocalOf { Color.White }
 
 /** Online controls drawn over the video player: Episodes, Sources, Sub/Dub, Next. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.yumeiro.ui.screens.video.PlayerHandle, onClosePlayer: () -> Unit) {
     val context = LocalContext.current
@@ -116,6 +117,7 @@ fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.y
     val state = s ?: return
     val positionMs = player.positionMs
     var panel by remember { mutableStateOf<Panel?>(null) }
+    var sourceSheetOpen by remember(state.videoId) { mutableStateOf(false) }
 
     // The session is finding new links while this player is still mounted (next episode, Sub/Dub
     // switch, all links refused → fresh links or the site's own page). The old source is stopped
@@ -133,7 +135,9 @@ fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.y
         }
         return
     }
-    BackHandler(enabled = panel != null) { panel = null }
+    BackHandler(enabled = panel != null || sourceSheetOpen) {
+        if (sourceSheetOpen) sourceSheetOpen = false else panel = null
+    }
 
     // Anime: AniSkip intro / outro button (or automatic skip).
     LaunchedEffect(state.videoId, state.phase) {
@@ -153,7 +157,7 @@ fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.y
             val actions = buildList {
                 if (state.episodes.size > 1) add(PlayerAction(PlayerActions.EPISODES, Icons.AutoMirrored.Filled.List, state.episode?.let { e -> listOfNotNull(e.season?.let { "S$it" }, e.episode?.let { "E$it" }).joinToString("").ifBlank { "Episodes" } } ?: "Episodes", "online_player_episodes") { panel = Panel.EPISODES })
                 if (state.hasNext) add(PlayerAction(PlayerActions.NEXT, Icons.Default.SkipNext, "Next", "online_player_next") { OnlineSession.next(context) })
-                if (state.links.isNotEmpty()) add(PlayerAction(PlayerActions.SOURCES, Icons.Default.HighQuality, "Source ${state.linkIndex + 1}/${state.links.size}", "online_player_sources") { panel = Panel.SOURCES })
+                if (state.links.isNotEmpty()) add(PlayerAction(PlayerActions.SOURCES, Icons.Default.HighQuality, "Source ${state.linkIndex + 1}/${state.links.size}", "online_player_sources") { sourceSheetOpen = true })
                 add(PlayerAction(PlayerActions.SUBTITLES, Icons.Default.ClosedCaption, "Subtitles", "online_player_subtitles") { panel = Panel.SUBTITLES })
                 if (other != null) add(PlayerAction(PlayerActions.VERSION, Icons.Default.Translate, "${state.version.ifBlank { "Default" }} → ${other.ifBlank { "Default" }}", "online_player_version") { OnlineSession.switchVersion(context, other) })
                 if (castOk && state.link != null) add(PlayerAction(PlayerActions.CAST, Icons.Default.Cast, "Cast", "online_player_cast") { castCurrent(context, state, player) })
@@ -175,6 +179,40 @@ fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.y
         }
     }
 
+    if (sourceSheetOpen) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { sourceSheetOpen = false },
+            containerColor = PanelColor,
+            contentColor = Color.White,
+            shape = dev.asfakul.yumeiro.ui.theme.Yume.shapeSheet,
+            dragHandle = dev.asfakul.yumeiro.ui.components.sheetDragHandle(),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 4.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Sources", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("${state.links.size} mirrors · ${state.api}", color = Color.White.copy(alpha = 0.58f), fontSize = 12.sp)
+                    }
+                    androidx.compose.material3.TextButton(onClick = { OnlineSession.retry(context) }) {
+                        Text("Refresh", color = SpotifyGreen)
+                    }
+                    IconButton(onClick = { sourceSheetOpen = false }) {
+                        Icon(Icons.Default.Close, "Close sources", tint = Color.White)
+                    }
+                }
+                Box(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                    SourcesPanel(state, player.selectAudio) { i ->
+                        sourceSheetOpen = false
+                        OnlineSession.switchSource(context, i, positionMs())
+                    }
+                }
+            }
+        }
+    }
+
     AnimatedVisibility(
         visible = panel != null, enter = slideInHorizontally { it } + fadeIn(), exit = slideOutHorizontally { it } + fadeOut(),
         modifier = Modifier.align(Alignment.CenterEnd),
@@ -182,7 +220,7 @@ fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.y
         Surface(color = PanelColor, shape = RoundedCornerShape(topStart = 22.dp, bottomStart = 22.dp), modifier = Modifier.fillMaxHeight().widthIn(max = 380.dp).fillMaxWidth(0.86f).testTag("online_player_panel")) {
             Column(Modifier.statusBarsPadding().navigationBarsPadding().padding(top = 8.dp)) {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    listOf(Panel.EPISODES to "Episodes", Panel.SOURCES to "Sources", Panel.SUBTITLES to "Subtitles").forEach { (p, label) ->
+                    listOf(Panel.EPISODES to "Episodes", Panel.SUBTITLES to "Subtitles").forEach { (p, label) ->
                         if (p == Panel.EPISODES && state.episodes.size <= 1) return@forEach
                         val sel = panel == p
                         Text(label, color = if (sel) Color.White else Color.White.copy(alpha = 0.55f), fontWeight = FontWeight.Bold, fontSize = 16.sp,
@@ -193,7 +231,6 @@ fun BoxScope.OnlinePlayerOverlay(controlsVisible: Boolean, player: dev.asfakul.y
                 }
                 when (panel) {
                     Panel.EPISODES -> EpisodesPanel(state) { i -> panel = null; OnlineSession.playEpisode(context, i) }
-                    Panel.SOURCES -> SourcesPanel(state, player.selectAudio) { i -> panel = null; OnlineSession.switchSource(context, i, positionMs()) }
                     Panel.SUBTITLES -> SubtitlesPanel(state) { sub -> panel = null; OnlineSession.addSubtitle(context, sub, positionMs()) }
                     null -> {}
                 }
@@ -355,8 +392,22 @@ private fun SourcesPanel(state: OnlineSession.State, selectAudio: (String) -> Bo
                 Column(Modifier.weight(1f)) {
                     Text(l.name.ifBlank { l.source }, color = ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val facts = remember(l) { dev.asfakul.yumeiro.online.SourceFacts.of(l, state.version) }
-                    Text(listOf(facts.line, l.source.takeIf { it != l.name }.orEmpty(), if (failed) "didn't work" else "").filter { it.isNotBlank() }.joinToString(" · "),
-                        color = when { failed -> errInk; facts.low -> dev.asfakul.yumeiro.ui.theme.WarnTone; else -> ink.copy(alpha = 0.55f) }, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    val health = remember(l.url) { dev.asfakul.yumeiro.online.ProviderCircuitBreaker.snapshot(l.url) }
+                    val healthLabel = when (health.status) {
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.HEALTHY ->
+                            if (health.avgLatencyMs > 0) "Healthy · ${health.avgLatencyMs} ms" else "Healthy"
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.DEGRADED -> "Slow / intermittent"
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.TRIPPED -> "Cooling down"
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.UNKNOWN -> "Not tested"
+                    }
+                    Text(listOf(facts.line, l.source.takeIf { it != l.name }.orEmpty(), healthLabel, if (failed) "didn't work" else "").filter { it.isNotBlank() }.joinToString(" · "),
+                        color = when {
+                            failed -> errInk
+                            health.status == dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.TRIPPED -> errInk
+                            health.status == dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.DEGRADED -> dev.asfakul.yumeiro.ui.theme.WarnTone
+                            facts.low -> dev.asfakul.yumeiro.ui.theme.WarnTone
+                            else -> ink.copy(alpha = 0.55f)
+                        }, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("online_player_source_detail"))
                 }
                 if (current) Icon(Icons.Default.CheckCircle, "Playing", tint = SpotifyGreen, modifier = Modifier.size(18.dp))

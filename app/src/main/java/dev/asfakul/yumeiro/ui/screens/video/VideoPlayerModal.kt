@@ -415,6 +415,8 @@ private fun VideoPlayerModalContent(
     // web pages) are inspected first; everything else starts immediately as before.
     val isNetworkStream = remember(video.id) { StreamMediaFactory.isNetworkUri(video.uri) }
     val originalRequest = remember(video.id) { StreamRepository.requestFor(video.uri) ?: StreamRequest(url = video.uri, title = video.title) }
+    // Startup latency is measured from this player's hand-off to its first rendered frame.
+    val onlinePlaybackStartedAtMs = remember(video.id) { android.os.SystemClock.elapsedRealtime() }
     var refreshAttempts by remember(video.id) { mutableStateOf(0) }
     // SEEK-1: the last seek (any control: bar, double tap, keys, chapters) and how often it was reopened.
     var lastSeekTargetMs by remember(video.id) { mutableStateOf<Long?>(null) }
@@ -1225,6 +1227,12 @@ private fun VideoPlayerModalContent(
             override fun onRenderedFirstFrame() {
                 dev.asfakul.yumeiro.player.StartTimeline.mark("first frame")
                 dev.asfakul.yumeiro.player.PlaybackDiagnostics.update { it.copy(firstFrame = true) }
+                if (video.id.startsWith("online:")) {
+                    dev.asfakul.yumeiro.online.OnlineSession.onPlaybackReady(
+                        video.id,
+                        android.os.SystemClock.elapsedRealtime() - onlinePlaybackStartedAtMs,
+                    )
+                }
             }
 
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {

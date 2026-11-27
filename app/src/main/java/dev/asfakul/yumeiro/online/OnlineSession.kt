@@ -67,6 +67,8 @@ object OnlineSession {
         val captured: Boolean = false,
         /** Round 13: how many sources the lists show ([PAGE] at a time, "Load more" adds a page). */
         val visible: Int = PAGE,
+        /** True once this link has rendered a frame and contributed one provider success sample. */
+        val healthReported: Boolean = false,
     ) {
         /** Sources the lists show right now (the playing one always included). */
         val shownLinks: Int get() = maxOf(visible, linkIndex + 1).coerceAtMost(links.size)
@@ -323,6 +325,26 @@ object OnlineSession {
         }
     }
 
+    /**
+     * Reports one successful playback sample per selected mirror. A rendered frame is stronger
+     * evidence than an HTTP 200: manifests and media segments can load while the decoder still
+     * has no usable picture.
+     */
+    fun onPlaybackReady(videoId: String, startupMs: Long) {
+        while (true) {
+            val current = _state.value ?: return
+            if (current.videoId != videoId || current.healthReported) return
+            val link = current.link ?: return
+            if (_state.compareAndSet(current, current.copy(healthReported = true))) {
+                ProviderCircuitBreaker.recordSuccess(
+                    ProviderCircuitBreaker.hostOf(link.url),
+                    startupMs.coerceAtLeast(1L),
+                )
+                return
+            }
+        }
+    }
+
     /** "Load more" in the source lists: shows the next [PAGE] sources (already gathered in the background). */
     fun loadMore() {
         _state.update { it?.copy(visible = (it.shownLinks + PAGE).coerceAtMost(it.links.size.coerceAtLeast(PAGE))) }
@@ -337,7 +359,7 @@ object OnlineSession {
         // and the session sat on the old error forever (the last resort was never reached).
         val id = videoIdFor(s.api, data) + ":" + link.url.hashCode().toUInt().toString(16) + (if (s.refreshed) "r" else "")
         val resume = resumeMs ?: OnlineHistory.progressOf(s.api, data)?.takeIf { !it.finished }?.positionMs ?: 0L
-        _state.update { cur -> (cur ?: s).copy(phase = Phase.PLAYING, linkIndex = linkIndex, videoId = id, message = null, visible = maxOf(s.visible, linkIndex + 1)) }
+        _state.update { cur -> (cur ?: s).copy(phase = Phase.PLAYING, linkIndex = linkIndex, videoId = id, message = null, visible = maxOf(s.visible, linkIndex + 1), healthReported = false) }
         dev.asfakul.yumeiro.player.StartTimeline.mark("player start", link.qualityLabel)
         Log.i(TAG, "play ${s.title} via ${link.name} (${link.qualityLabel}, ${link.formatLabel}) ${link.url.take(120)}")
         val provider = ExtensionManager.provider(s.api)
@@ -419,8 +441,16 @@ object OnlineSession {
         if (fromVideoId != null && s.videoId != null && fromVideoId != s.videoId) return true
         if (s.phase == Phase.RESOLVING) return true
         val app = context.applicationContext
-        val failed = s.failed + (s.link?.url ?: "")
-        val next = s.links.indices.firstOrNull { it != s.linkIndex && s.links[it].url !in failed }
+        val currentLink = s.link
+        currentLink?.let { link ->
+            ProviderCircuitBreaker.recordFailure(ProviderCircuitBreaker.hostOf(link.url), -1)
+        }
+        val failed = s.failed + (currentLink?.url ?: "")
+        val next = s.links.indices.firstOrNull {
+            it != s.linkIndex &&
+                s.links[it].url !in failed &&
+                !ProviderCircuitBreaker.isTripped(s.links[it].url)
+        }
         if (next != null) {
             _state.update { cur -> (cur ?: s).copy(failed = failed) }
             Log.w(TAG, "failover → ${s.links[next].name}")
@@ -555,6 +585,7 @@ object OnlineSession {
         job?.cancel(); job = null; failoverJob?.cancel(); failoverJob = null
         ended = _state.value?.takeIf { it.videoId != null }
         _state.value = null
+        dev.asfakul.yumeiro.stream.StreamLoopbackProxy.clearSessions()
     }
 
     /** Cancels resolving but keeps the session if something is already playing. */

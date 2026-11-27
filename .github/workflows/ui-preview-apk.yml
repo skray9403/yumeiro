@@ -1,0 +1,58 @@
+# Re-run the standalone UI mockup build after the Kotlin syntax fix.
+name: Yumeiro UI Mockup APK
+
+on:
+  push:
+    branches:
+      - streaming-only-refactor
+    paths:
+      - ".github/workflows/ui-preview-apk.yml"
+      - "ui-preview/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yumeiro-ui-mockup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mockup-apk:
+    name: Build standalone native UI mockup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        with:
+          distribution: temurin
+          java-version: "21.0.13"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+
+      - name: Assemble standalone UI mockup
+        run: ./gradlew :ui-preview:assembleDebug --no-daemon
+
+      - name: Verify APK
+        run: |
+          APK="ui-preview/build/outputs/apk/debug/ui-preview-debug.apk"
+          test -s "$APK"
+          echo "APK_BYTES=$(stat -c%s "$APK")" >> "$GITHUB_STEP_SUMMARY"
+          sha256sum "$APK" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload standalone mockup APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: Yumeiro-UI-Mockup-APK
+          path: ui-preview/build/outputs/apk/debug/ui-preview-debug.apk
+          retention-days: 14

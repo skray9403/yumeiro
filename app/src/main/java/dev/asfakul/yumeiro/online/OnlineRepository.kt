@@ -653,6 +653,9 @@ object OnlineRepository {
                 // (a link with no known quality is never pushed down).
                 .thenBy { if (maxHeight > 0 && it.quality > maxHeight) 1 else 0 }
                 .thenByDescending { it.rank }
+                // Prefer providers with a healthy recent playback history; temporarily tripped
+                // hosts remain available for manual selection but are pushed to the bottom.
+                .thenByDescending { ProviderCircuitBreaker.rankBonus(it.url) }
                 .thenByDescending { it.isHls || it.isDash }
                 .thenBy { if (it.container == "mp4" || it.container == "m3u8" || it.container == "mpd") 0 else 1 }
                 .thenBy { it.name.lowercase() }
