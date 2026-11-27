@@ -19,12 +19,11 @@ dependencyResolutionManagement {
   repositories {
     google()
     mavenCentral()
-    // CloudStream extension API (and its NiceHttp / NewPipeExtractor deps) is published on JitPack.
     maven("https://jitpack.io") {
       content {
         includeGroup("com.github.recloudstream.cloudstream")
         includeGroup("com.github.Blatzar")
-        includeGroup("com.github.mihonapp") // injekt (Aniyomi / Mihon extensions)
+        includeGroup("com.github.mihonapp")
         includeGroup("com.github.teamnewpipe")
         includeGroupByRegex("com\\.github\\.TeamNewPipe.*")
       }
@@ -35,5 +34,5 @@ dependencyResolutionManagement {
 rootProject.name = "Yumeiro"
 
 include(":app")
-// G12 X2: cold-start Macrobenchmark + baseline profile generator for the R8 preview build.
 include(":benchmark")
+include(":ui-preview")
