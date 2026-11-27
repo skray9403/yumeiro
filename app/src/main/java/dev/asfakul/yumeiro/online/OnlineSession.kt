@@ -9,6 +9,7 @@ import android.content.Context
 import android.util.Log
 import dev.asfakul.yumeiro.data.model.VideoItem
 import dev.asfakul.yumeiro.stream.IncomingMedia
+import dev.asfakul.yumeiro.stream.StreamLoopbackProxy
 import dev.asfakul.yumeiro.online.web.HeadlessCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -350,7 +351,30 @@ object OnlineSession {
         if (ytId != null) { playYouTube(context, ytId, request, id, resume, s.detail.api); return }
         val site = runCatching { provider?.mainUrl }.getOrNull()
         AccessLadder.reset(request.url); AccessLadder.hint(request.url, site)
-        IncomingMedia.open(context, request, id = id, positionMs = resume, folder = s.detail.api)
+        // Relay progressive and HLS streams through loopback so range retries and manifest
+        // URL rewriting are available. DASH, RTSP/RTMP, DRM and non-HTTP schemes stay on the
+        // native Media3 path because their segment/license protocols need dedicated handling.
+        val relayEligible = request.drmScheme == dev.asfakul.yumeiro.stream.DrmScheme.NONE &&
+            request.url.startsWith("http", ignoreCase = true) &&
+            (link.isHls || (!link.isDash && !link.url.startsWith("rtsp", ignoreCase = true)))
+        if (relayEligible) {
+            val upstreamHeaders = buildMap {
+                putAll(request.requestHeaders())
+                request.userAgent?.takeIf { it.isNotBlank() }?.let { put("User-Agent", it) }
+            }
+            val localUrl = StreamLoopbackProxy.register(context, request.url, upstreamHeaders)
+            val relayed = request.copy(
+                url = localUrl,
+                userAgent = null,
+                referer = null,
+                origin = null,
+                cookie = null,
+                headers = emptyMap(),
+            )
+            IncomingMedia.open(context, relayed, id = id, positionMs = resume, folder = s.detail.api)
+        } else {
+            IncomingMedia.open(context, request, id = id, positionMs = resume, folder = s.detail.api)
+        }
     }
 
     private var ytJob: Job? = null
@@ -419,8 +443,16 @@ object OnlineSession {
         if (fromVideoId != null && s.videoId != null && fromVideoId != s.videoId) return true
         if (s.phase == Phase.RESOLVING) return true
         val app = context.applicationContext
-        val failed = s.failed + (s.link?.url ?: "")
-        val next = s.links.indices.firstOrNull { it != s.linkIndex && s.links[it].url !in failed }
+        val currentLink = s.link
+        currentLink?.let { link ->
+            ProviderCircuitBreaker.recordFailure(ProviderCircuitBreaker.hostOf(link.url), -1)
+        }
+        val failed = s.failed + (currentLink?.url ?: "")
+        val next = s.links.indices.firstOrNull {
+            it != s.linkIndex &&
+                s.links[it].url !in failed &&
+                !ProviderCircuitBreaker.isTripped(s.links[it].url)
+        }
         if (next != null) {
             _state.update { cur -> (cur ?: s).copy(failed = failed) }
             Log.w(TAG, "failover → ${s.links[next].name}")
