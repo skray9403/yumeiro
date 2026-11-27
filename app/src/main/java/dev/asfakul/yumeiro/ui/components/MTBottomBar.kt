@@ -135,11 +135,6 @@ fun MTBottomBar(
                 items.forEach { item ->
                     val isSelected = currentRoute == item.route
                     val tint by animateColorAsState(if (isSelected) activeTint else inactive, label = "navTint")
-                    val pill by animateFloatAsState(
-                        if (isSelected) 1f else 0f,
-                        if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 600f),
-                        label = "navPill",
-                    )
                     // Keyboard / D-pad focus: a ring around the tab (touch never focuses it).
                     val tabSource = remember { MutableInteractionSource() }
                     val tabFocused by tabSource.collectIsFocusedAsState()
@@ -204,7 +199,8 @@ fun MTBottomBar(
                                 )
                             }
                         }
-                    }                }
+                    }
+                }
             }
         }
     }
