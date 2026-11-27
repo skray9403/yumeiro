@@ -563,6 +563,7 @@ object OnlineSession {
         job?.cancel(); job = null; failoverJob?.cancel(); failoverJob = null
         ended = _state.value?.takeIf { it.videoId != null }
         _state.value = null
+        dev.asfakul.yumeiro.stream.StreamLoopbackProxy.clearSessions()
     }
 
     /** Cancels resolving but keeps the session if something is already playing. */
