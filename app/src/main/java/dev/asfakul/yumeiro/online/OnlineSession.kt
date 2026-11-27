@@ -9,7 +9,6 @@ import android.content.Context
 import android.util.Log
 import dev.asfakul.yumeiro.data.model.VideoItem
 import dev.asfakul.yumeiro.stream.IncomingMedia
-import dev.asfakul.yumeiro.stream.StreamLoopbackProxy
 import dev.asfakul.yumeiro.online.web.HeadlessCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -351,30 +350,7 @@ object OnlineSession {
         if (ytId != null) { playYouTube(context, ytId, request, id, resume, s.detail.api); return }
         val site = runCatching { provider?.mainUrl }.getOrNull()
         AccessLadder.reset(request.url); AccessLadder.hint(request.url, site)
-        // Relay progressive and HLS streams through loopback so range retries and manifest
-        // URL rewriting are available. DASH, RTSP/RTMP, DRM and non-HTTP schemes stay on the
-        // native Media3 path because their segment/license protocols need dedicated handling.
-        val relayEligible = request.drmScheme == dev.asfakul.yumeiro.stream.DrmScheme.NONE &&
-            request.url.startsWith("http", ignoreCase = true) &&
-            (link.isHls || (!link.isDash && !link.url.startsWith("rtsp", ignoreCase = true)))
-        if (relayEligible) {
-            val upstreamHeaders = buildMap {
-                putAll(request.requestHeaders())
-                request.userAgent?.takeIf { it.isNotBlank() }?.let { put("User-Agent", it) }
-            }
-            val localUrl = StreamLoopbackProxy.register(context, request.url, upstreamHeaders)
-            val relayed = request.copy(
-                url = localUrl,
-                userAgent = null,
-                referer = null,
-                origin = null,
-                cookie = null,
-                headers = emptyMap(),
-            )
-            IncomingMedia.open(context, relayed, id = id, positionMs = resume, folder = s.detail.api)
-        } else {
-            IncomingMedia.open(context, request, id = id, positionMs = resume, folder = s.detail.api)
-        }
+        IncomingMedia.open(context, request, id = id, positionMs = resume, folder = s.detail.api)
     }
 
     private var ytJob: Job? = null
