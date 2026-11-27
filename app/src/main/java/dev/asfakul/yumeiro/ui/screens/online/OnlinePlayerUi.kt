@@ -355,8 +355,22 @@ private fun SourcesPanel(state: OnlineSession.State, selectAudio: (String) -> Bo
                 Column(Modifier.weight(1f)) {
                     Text(l.name.ifBlank { l.source }, color = ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val facts = remember(l) { dev.asfakul.yumeiro.online.SourceFacts.of(l, state.version) }
-                    Text(listOf(facts.line, l.source.takeIf { it != l.name }.orEmpty(), if (failed) "didn't work" else "").filter { it.isNotBlank() }.joinToString(" · "),
-                        color = when { failed -> errInk; facts.low -> dev.asfakul.yumeiro.ui.theme.WarnTone; else -> ink.copy(alpha = 0.55f) }, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    val health = remember(l.url) { dev.asfakul.yumeiro.online.ProviderCircuitBreaker.snapshot(l.url) }
+                    val healthLabel = when (health.status) {
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.HEALTHY ->
+                            if (health.avgLatencyMs > 0) "Healthy · ${health.avgLatencyMs} ms" else "Healthy"
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.DEGRADED -> "Slow / intermittent"
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.TRIPPED -> "Cooling down"
+                        dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.UNKNOWN -> "Not tested"
+                    }
+                    Text(listOf(facts.line, l.source.takeIf { it != l.name }.orEmpty(), healthLabel, if (failed) "didn't work" else "").filter { it.isNotBlank() }.joinToString(" · "),
+                        color = when {
+                            failed -> errInk
+                            health.status == dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.TRIPPED -> errInk
+                            health.status == dev.asfakul.yumeiro.online.ProviderCircuitBreaker.Status.DEGRADED -> dev.asfakul.yumeiro.ui.theme.WarnTone
+                            facts.low -> dev.asfakul.yumeiro.ui.theme.WarnTone
+                            else -> ink.copy(alpha = 0.55f)
+                        }, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("online_player_source_detail"))
                 }
                 if (current) Icon(Icons.Default.CheckCircle, "Playing", tint = SpotifyGreen, modifier = Modifier.size(18.dp))
