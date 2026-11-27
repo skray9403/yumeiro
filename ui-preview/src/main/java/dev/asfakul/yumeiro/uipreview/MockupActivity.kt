@@ -107,6 +107,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -249,12 +250,28 @@ private fun YumeiroMockupApp() {
             AnimatedContent(
                 targetState = contextWindow,
                 transitionSpec = {
-                    val enter = fadeIn(tween(230)) +
-                        scaleIn(initialScale = .965f, animationSpec = spring(dampingRatio = .9f, stiffness = 420f)) +
-                        slideInVertically(initialOffsetY = { it / 14 }, animationSpec = spring(dampingRatio = .92f, stiffness = 430f))
-                    val exit = fadeOut(tween(150)) +
-                        scaleOut(targetScale = .985f, animationSpec = tween(160)) +
-                        slideOutVertically(targetOffsetY = { it / 20 }, animationSpec = tween(170))
+                    val enter = when (targetState) {
+                        ContextWindow.SEARCH -> fadeIn(tween(220)) +
+                            scaleIn(initialScale = .94f, transformOrigin = TransformOrigin(0.5f, 1f), animationSpec = spring(dampingRatio = .92f, stiffness = 440f)) +
+                            slideInVertically(initialOffsetY = { it / 5 }, animationSpec = spring(dampingRatio = .92f, stiffness = 440f))
+                        ContextWindow.SETTINGS -> fadeIn(tween(190)) +
+                            scaleIn(initialScale = .92f, transformOrigin = TransformOrigin(1f, 0f), animationSpec = spring(dampingRatio = .9f, stiffness = 470f)) +
+                            slideInHorizontally(initialOffsetX = { it / 7 }, animationSpec = spring(dampingRatio = .92f, stiffness = 470f))
+                        else -> fadeIn(tween(230)) +
+                            scaleIn(initialScale = .965f, animationSpec = spring(dampingRatio = .9f, stiffness = 420f)) +
+                            slideInVertically(initialOffsetY = { it / 14 }, animationSpec = spring(dampingRatio = .92f, stiffness = 430f))
+                    }
+                    val exit = when (initialState) {
+                        ContextWindow.SEARCH -> fadeOut(tween(150)) +
+                            scaleOut(targetScale = .97f, transformOrigin = TransformOrigin(0.5f, 1f), animationSpec = tween(160)) +
+                            slideOutVertically(targetOffsetY = { it / 9 }, animationSpec = tween(170))
+                        ContextWindow.SETTINGS -> fadeOut(tween(140)) +
+                            scaleOut(targetScale = .96f, transformOrigin = TransformOrigin(1f, 0f), animationSpec = tween(160)) +
+                            slideOutHorizontally(targetOffsetX = { it / 10 }, animationSpec = tween(160))
+                        else -> fadeOut(tween(150)) +
+                            scaleOut(targetScale = .985f, animationSpec = tween(160)) +
+                            slideOutVertically(targetOffsetY = { it / 20 }, animationSpec = tween(170))
+                    }
                     enter togetherWith exit
                 },
                 label = "context-window",
@@ -335,7 +352,7 @@ private fun HomeScreen(
 ) {
     val pagerState = rememberPagerState(pageCount = { featuredTitles.size })
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(top = 12.dp, bottom = 126.dp),
         verticalArrangement = Arrangement.spacedBy(27.dp),
     ) {
@@ -661,7 +678,7 @@ private fun LibraryScreen(
         else -> libraryTitles.filter { it.progress > 0f }
     }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 128.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
@@ -1053,10 +1070,13 @@ private fun SettingsWindow(
     onWifiOnly: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-            .clip(RoundedCornerShape(30.dp)).background(Surface1)
+    Box(Modifier.fillMaxSize()) {
+      Column(
+        Modifier.align(Alignment.TopEnd).statusBarsPadding()
+            .padding(top = 8.dp, end = 12.dp, bottom = 12.dp)
+            .widthIn(max = 390.dp).fillMaxHeight(.86f)
+            .clip(RoundedCornerShape(29.dp)).background(Surface1)
+            .border(1.dp, Color.White.copy(alpha = .08f), RoundedCornerShape(29.dp))
             .padding(horizontal = 20.dp, vertical = 17.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
@@ -1085,6 +1105,7 @@ private fun SettingsWindow(
             }
             Text("YUMEIRO UI PREVIEW  ·  BACKEND NOT CONNECTED", color = Muted, fontSize = 8.sp, letterSpacing = 1.sp)
         }
+      }
     }
 }
 
