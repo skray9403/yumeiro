@@ -197,7 +197,8 @@ private fun YumeiroMockupApp() {
         contextWindow = ContextWindow.DETAILS
     }
 
-    val focusManager = LocalFocusManager.current\n    BackHandler(enabled = contextWindow != ContextWindow.NONE) {
+    val focusManager = LocalFocusManager.current
+    BackHandler(enabled = contextWindow != ContextWindow.NONE) {
         contextWindow = ContextWindow.NONE
         focusManager.clearFocus()
     }
