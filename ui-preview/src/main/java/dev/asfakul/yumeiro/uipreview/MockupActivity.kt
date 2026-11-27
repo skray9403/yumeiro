@@ -130,7 +130,7 @@ private val Paper = Color(0xFFF4F2EC)
 private val Muted = Color(0xFFA6A9AF)
 private val Gold = Color(0xFFF2C46F)
 private val GoldWash = Color(0x2EF2C46F)
-private val Motion = spring<Float>(dampingRatio = 0.92f, stiffness = 480f)
+private val DpMotion = spring<androidx.compose.ui.unit.Dp>(dampingRatio = 0.92f, stiffness = 480f)
 
 class MockupActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -196,9 +196,9 @@ private fun YumeiroMockupApp() {
         contextWindow = ContextWindow.DETAILS
     }
 
-    BackHandler(enabled = contextWindow != ContextWindow.NONE) {
+    val focusManager = LocalFocusManager.current\n    BackHandler(enabled = contextWindow != ContextWindow.NONE) {
         contextWindow = ContextWindow.NONE
-        LocalFocusManager.current.clearFocus()
+        focusManager.clearFocus()
     }
 
     MaterialTheme(
@@ -362,7 +362,7 @@ private fun HomeScreen(
         ) {
             repeat(featuredTitles.size) { index ->
                 val active = pagerState.currentPage == index
-                val width by animateDpAsState(if (active) 18.dp else 5.dp, animationSpec = Motion, label = "hero-page-indicator")
+                val width by animateDpAsState(if (active) 18.dp else 5.dp, animationSpec = DpMotion, label = "hero-page-indicator")
                 Box(
                     Modifier.padding(horizontal = 3.dp).width(width).height(4.dp)
                         .clip(CircleShape).background(if (active) Gold else Surface3),
@@ -1089,7 +1089,7 @@ private fun SettingsWindow(
 }
 
 @Composable
-private fun SettingsGroup(title: String, content: @Composable Column.() -> Unit) {
+private fun SettingsGroup(title: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
         Column(
