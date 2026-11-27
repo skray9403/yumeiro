@@ -133,7 +133,9 @@ object StreamLoopbackProxy {
                 writeStatus(out, 503, "Service Unavailable")
                 return
             }
-            val client = NetworkClient.get(app)
+            // Preserve the extension's browser-check and signed-request interceptors on
+            // the upstream connection; the loopback socket itself remains plain local HTTP.
+            val client = StreamInterceptors.clientFor(entry.url, NetworkClient.get(app))
             val rangeHeader = reqHeaders["range"]
             val host = runCatching { URI(entry.url).host.orEmpty() }.getOrDefault("")
             val t0 = System.currentTimeMillis()
