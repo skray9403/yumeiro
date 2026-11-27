@@ -41,14 +41,19 @@ object IncomingMedia {
      * came from with [recent]; the default records nothing (NB15D-1).
      */
     fun open(context: Context, request: StreamRequest, recent: Recent = Recent.NONE, id: String? = null, positionMs: Long = 0L, folder: String? = null) {
+        // Keep the canonical URL for history and diagnostics, while the player receives
+        // the local relay URL when this request uses a supported HTTP media format.
+        val playbackRequest = StreamLoopbackProxy.relay(context, request)
         StreamRepository.register(request)
+        if (playbackRequest.url != request.url) StreamRepository.register(playbackRequest)
         when (recent) {
             Recent.NONE -> Unit
             Recent.LINK -> StreamRepository.addToHistory(context, request)
             Recent.LIVE -> StreamRepository.addLive(context, request)
             Recent.KEEP -> StreamRepository.touch(context, request)
         }
-        val item = request.toVideoItem()
+        // Preserve the canonical media id even though the player URI is now loopback-local.
+        val item = request.toVideoItem().copy(uri = playbackRequest.url)
         _pending.value = item.copy(
             id = id ?: item.id,
             playbackPositionMs = positionMs.coerceAtLeast(0L),
